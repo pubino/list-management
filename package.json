@@ -10,7 +10,8 @@
     "func:start": "cd azure-func-lists && npm start",
     "func:install": "cd azure-func-lists && npm install",
     "setup": "./scripts/setup.sh",
-    "deploy": "./scripts/deploy.sh"
+    "deploy": "./scripts/deploy.sh",
+    "destroy": "./scripts/destroy.sh"
   },
   "devDependencies": {
     "jest": "^29.7.0"

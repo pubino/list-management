@@ -146,5 +146,63 @@ John`,
     },
     from: 'john@company.com',
     receivedDateTime: '2024-01-15T15:00:00Z'
+  },
+
+  // Bounce with attachment (LISTSERV style)
+  attachmentBounce: {
+    messageId: 'attach-001',
+    subject: 'Bounce notice from opt-seminar',
+    body: `The enclosed  message, found  in the  opt-seminar mailbox  and shown  under the
+spool ID 7120729 in the system log,  has been identified as a possible delivery
+error notice for the following reason: "X-Report-Type:" field found in the mail
+header.`,
+    headers: {
+      'Content-Type': 'multipart/mixed'
+    },
+    from: 'LISTSERV@listserv.example.edu',
+    receivedDateTime: '2024-01-15T16:00:00Z',
+    attachments: [
+      {
+        name: 'bounce-report.eml',
+        contentType: 'message/rfc822',
+        content: `From: Mail Delivery Subsystem <mailer-daemon@example.com>
+To: opt-seminar-request@listserv.example.edu
+Subject: Returned mail: see transcript for details
+X-Failed-Recipients: bounced.user@invalid-domain.com
+X-Report-Type: delivery-status
+
+Final-Recipient: rfc822; bounced.user@invalid-domain.com
+Action: failed
+Status: 5.1.1
+Diagnostic-Code: smtp; 550 5.1.1 User unknown`
+      }
+    ]
+  },
+
+  // Multiple attachments bounce
+  multiAttachmentBounce: {
+    messageId: 'multi-attach-001',
+    subject: 'Multiple bounce reports',
+    body: 'Multiple delivery failures detected. See attached reports.',
+    headers: {},
+    from: 'postmaster@example.com',
+    receivedDateTime: '2024-01-15T17:00:00Z',
+    attachments: [
+      {
+        name: 'report1.eml',
+        contentType: 'message/rfc822',
+        content: `X-Failed-Recipients: user1@bad-domain.com
+
+Final-Recipient: rfc822; user1@bad-domain.com
+Status: 5.1.1`
+      },
+      {
+        name: 'report2.txt',
+        contentType: 'text/plain',
+        content: `Final-Recipient: rfc822; user2@bad-domain.com
+Status: 5.2.2
+Diagnostic-Code: smtp; 552 Mailbox full`
+      }
+    ]
   }
 };

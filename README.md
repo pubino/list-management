@@ -9,6 +9,7 @@ This project monitors Outlook 365 mailboxes for email delivery failures and auto
 - RFC 3464 DSN (Delivery Status Notification) format
 - X-Failed-Recipients headers
 - Common bounce message patterns from various email providers
+- **Attachments**: .eml files and text attachments containing bounce details (e.g., LISTSERV-style bounces)
 
 ## Architecture
 
@@ -64,7 +65,14 @@ The Function App accepts POST requests with the following JSON structure:
     "X-Failed-Recipients": "user@example.com"
   },
   "from": "mailer-daemon@example.com",
-  "receivedDateTime": "2024-01-15T10:30:00Z"
+  "receivedDateTime": "2024-01-15T10:30:00Z",
+  "attachments": [
+    {
+      "name": "bounce.eml",
+      "contentType": "message/rfc822",
+      "content": "base64 or plain text content"
+    }
+  ]
 }
 ```
 
@@ -83,7 +91,7 @@ The Function App accepts POST requests with the following JSON structure:
       "source": "dsn-final-recipient"
     }
   ],
-  "processingDetails": "Extracted 1 failed address(es) from message"
+  "processingDetails": "Extracted 1 failed address(es) from message (body: 1, attachments: 0)"
 }
 ```
 
@@ -145,6 +153,19 @@ failed@example.com
 The email account does not exist at the organization this message was sent to.
 ```
 
+**LISTSERV-style Bounce with Attachment:**
+
+Some mail systems (e.g., LISTSERV) send bounce notifications where the actual error details are in an attached .eml file:
+
+```
+The enclosed message, found in the opt-seminar mailbox and shown under the
+spool ID 7120729 in the system log, has been identified as a possible delivery
+error notice for the following reason: "X-Report-Type:" field found in the mail
+header.
+```
+
+The attached .eml file contains the actual DSN with failed recipient information.
+
 ## Testing Suite
 
 All tests run in Docker containers for consistent environments.
@@ -185,6 +206,9 @@ Tests cover:
 - Diagnostic code extraction
 - Failure reason categorization
 - HTTP endpoint error handling
+- .eml attachment parsing
+- Base64 encoded attachments
+- Multiple attachment handling
 
 ### CI/CD
 
@@ -309,6 +333,7 @@ list-management/
 ├── scripts/                    # Deployment scripts
 │   ├── setup.sh
 │   ├── deploy.sh
+│   ├── destroy.sh
 │   └── config.env.template
 ├── .github/
 │   └── workflows/
@@ -329,4 +354,5 @@ list-management/
 | `npm run func:install` | Install Function App dependencies |
 | `npm run setup` | Interactive deployment setup |
 | `npm run deploy` | Deploy to Azure |
+| `npm run destroy` | Tear down Azure deployment |
 

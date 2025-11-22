@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions');
-const { extractFailedAddresses } = require('../lib/addressExtractor');
+const { extractFailedAddresses, extractFromAttachments } = require('../lib/addressExtractor');
 
 app.http('processEmail', {
   methods: ['POST'],
@@ -21,14 +21,26 @@ app.http('processEmail', {
         };
       }
 
-      // Extract failed addresses
-      const extractedAddresses = extractFailedAddresses(message);
+      // Extract failed addresses from message body
+      const bodyAddresses = extractFailedAddresses(message);
+
+      // Extract failed addresses from attachments (.eml files, etc.)
+      const attachmentAddresses = extractFromAttachments(message.attachments || []);
+
+      // Combine and deduplicate
+      const addressMap = new Map();
+      for (const addr of [...bodyAddresses, ...attachmentAddresses]) {
+        if (!addressMap.has(addr.address)) {
+          addressMap.set(addr.address, addr);
+        }
+      }
+      const extractedAddresses = Array.from(addressMap.values());
 
       const response = {
         success: true,
         messageId: message.messageId,
         extractedAddresses,
-        processingDetails: `Extracted ${extractedAddresses.length} failed address(es) from message`
+        processingDetails: `Extracted ${extractedAddresses.length} failed address(es) from message (body: ${bodyAddresses.length}, attachments: ${attachmentAddresses.length})`
       };
 
       context.log(`Successfully processed message ${message.messageId}, found ${extractedAddresses.length} addresses`);

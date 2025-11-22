@@ -32,7 +32,8 @@
             "method": "get",
             "uri": "https://graph.microsoft.com/v1.0/me/mailFolders/@{encodeURIComponent(triggerBody()?['folderId'])}/messages/@{encodeURIComponent(triggerBody()?['id'])}",
             "queries": {
-              "$select": "id,subject,body,from,receivedDateTime,internetMessageHeaders"
+              "$select": "id,subject,body,from,receivedDateTime,internetMessageHeaders,hasAttachments",
+              "$expand": "attachments"
             }
           },
           "host": {
@@ -80,7 +81,8 @@
             "body": "@triggerBody()?['body']?['content']",
             "headers": "@triggerBody()?['internetMessageHeaders']",
             "from": "@triggerBody()?['from']?['emailAddress']?['address']",
-            "receivedDateTime": "@triggerBody()?['receivedDateTime']"
+            "receivedDateTime": "@triggerBody()?['receivedDateTime']",
+            "attachments": "@triggerBody()?['attachments']"
           }
         },
         "runAfter": {

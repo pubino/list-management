@@ -4,7 +4,9 @@ const {
   extractFromDSN,
   extractFromBouncePatterns,
   extractDiagnostics,
-  extractFailureReason
+  extractFailureReason,
+  extractFromAttachments,
+  parseEmlContent
 } = require('../../azure-func-lists/src/lib/addressExtractor');
 
 describe('addressExtractor', () => {
@@ -195,6 +197,145 @@ describe('addressExtractor', () => {
       };
       const result = extractFailedAddresses(message);
       expect(result[0].address).toBe('user@example.com');
+    });
+  });
+
+  describe('parseEmlContent', () => {
+    it('should parse headers and body from .eml content', () => {
+      const emlContent = `From: sender@example.com
+To: recipient@example.com
+Subject: Test Email
+X-Failed-Recipients: failed@example.com
+
+This is the body of the email.`;
+      const result = parseEmlContent(emlContent);
+      expect(result.headers['from']).toBe('sender@example.com');
+      expect(result.headers['to']).toBe('recipient@example.com');
+      expect(result.headers['x-failed-recipients']).toBe('failed@example.com');
+      expect(result.body).toContain('This is the body');
+    });
+
+    it('should handle multi-line headers', () => {
+      const emlContent = `Subject: This is a very long subject
+ that continues on the next line
+From: sender@example.com
+
+Body text`;
+      const result = parseEmlContent(emlContent);
+      expect(result.headers['subject']).toContain('continues on the next line');
+    });
+  });
+
+  describe('extractFromAttachments', () => {
+    it('should extract addresses from .eml attachment', () => {
+      const emlContent = `From: mailer-daemon@example.com
+To: sender@example.com
+X-Failed-Recipients: bounced@example.com
+
+Final-Recipient: rfc822; bounced@example.com
+Status: 5.1.1
+Diagnostic-Code: smtp; 550 User not found`;
+
+      const attachments = [{
+        name: 'bounce.eml',
+        contentType: 'message/rfc822',
+        content: emlContent
+      }];
+
+      const result = extractFromAttachments(attachments);
+      expect(result.some(r => r.address === 'bounced@example.com')).toBe(true);
+    });
+
+    it('should extract addresses from base64 encoded attachment', () => {
+      const emlContent = `X-Failed-Recipients: encoded@example.com
+
+Final-Recipient: rfc822; encoded@example.com`;
+      const base64Content = Buffer.from(emlContent).toString('base64');
+
+      const attachments = [{
+        name: 'bounce.eml',
+        contentType: 'message/rfc822; base64',
+        content: base64Content
+      }];
+
+      const result = extractFromAttachments(attachments);
+      expect(result.some(r => r.address === 'encoded@example.com')).toBe(true);
+    });
+
+    it('should extract addresses from plain text attachment', () => {
+      const textContent = `Final-Recipient: rfc822; text@example.com
+Status: 5.1.1`;
+
+      const attachments = [{
+        name: 'bounce.txt',
+        contentType: 'text/plain',
+        content: textContent
+      }];
+
+      const result = extractFromAttachments(attachments);
+      expect(result.some(r => r.address === 'text@example.com')).toBe(true);
+    });
+
+    it('should handle multiple attachments', () => {
+      const attachments = [
+        {
+          name: 'bounce1.eml',
+          contentType: 'message/rfc822',
+          content: 'X-Failed-Recipients: user1@example.com\n\nBody'
+        },
+        {
+          name: 'bounce2.eml',
+          contentType: 'message/rfc822',
+          content: 'X-Failed-Recipients: user2@example.com\n\nBody'
+        }
+      ];
+
+      const result = extractFromAttachments(attachments);
+      expect(result.some(r => r.address === 'user1@example.com')).toBe(true);
+      expect(result.some(r => r.address === 'user2@example.com')).toBe(true);
+    });
+
+    it('should deduplicate addresses across attachments', () => {
+      const attachments = [
+        {
+          name: 'bounce1.eml',
+          contentType: 'message/rfc822',
+          content: 'X-Failed-Recipients: same@example.com\n\nBody'
+        },
+        {
+          name: 'bounce2.eml',
+          contentType: 'message/rfc822',
+          content: 'X-Failed-Recipients: same@example.com\n\nBody'
+        }
+      ];
+
+      const result = extractFromAttachments(attachments);
+      const addresses = result.filter(r => r.address === 'same@example.com');
+      expect(addresses).toHaveLength(1);
+    });
+
+    it('should return empty array for empty attachments', () => {
+      const result = extractFromAttachments([]);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should skip attachments without content', () => {
+      const attachments = [
+        { name: 'empty.eml', contentType: 'message/rfc822' }
+      ];
+      const result = extractFromAttachments(attachments);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should include attachment name in source', () => {
+      const attachments = [{
+        name: 'bounce.eml',
+        contentType: 'message/rfc822',
+        content: 'X-Failed-Recipients: test@example.com\n\nBody'
+      }];
+
+      const result = extractFromAttachments(attachments);
+      expect(result[0].attachmentName).toBe('bounce.eml');
     });
   });
 });

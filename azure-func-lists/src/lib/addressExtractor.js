@@ -180,11 +180,142 @@ function extractFailedAddresses(message) {
   return results;
 }
 
+/**
+ * Parse .eml file content to extract headers and body
+ */
+function parseEmlContent(content) {
+  // Split headers from body (separated by double newline)
+  const parts = content.split(/\r?\n\r?\n/);
+  const headerSection = parts[0] || '';
+  const bodySection = parts.slice(1).join('\n\n');
+
+  // Parse headers into object
+  const headers = {};
+  const headerLines = headerSection.split(/\r?\n/);
+  let currentHeader = '';
+  let currentValue = '';
+
+  for (const line of headerLines) {
+    if (/^\s+/.test(line)) {
+      // Continuation of previous header
+      currentValue += ' ' + line.trim();
+    } else {
+      // Save previous header
+      if (currentHeader) {
+        headers[currentHeader.toLowerCase()] = currentValue;
+      }
+      // Start new header
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      if (match) {
+        currentHeader = match[1];
+        currentValue = match[2];
+      }
+    }
+  }
+  // Save last header
+  if (currentHeader) {
+    headers[currentHeader.toLowerCase()] = currentValue;
+  }
+
+  return { headers, body: bodySection };
+}
+
+/**
+ * Extract failed addresses from attachments
+ */
+function extractFromAttachments(attachments) {
+  const results = [];
+
+  for (const attachment of attachments) {
+    if (!attachment || !attachment.content) continue;
+
+    // Decode base64 content if needed
+    let content = attachment.content;
+    if (attachment.contentType?.includes('base64') || /^[A-Za-z0-9+/=]+$/.test(content.replace(/\s/g, ''))) {
+      try {
+        content = Buffer.from(content, 'base64').toString('utf-8');
+      } catch (e) {
+        // Not base64, use as-is
+      }
+    }
+
+    const name = (attachment.name || '').toLowerCase();
+    const contentType = (attachment.contentType || '').toLowerCase();
+
+    // Process .eml files or message/rfc822 content
+    if (name.endsWith('.eml') || contentType.includes('message/rfc822') || contentType.includes('text/rfc822')) {
+      const parsed = parseEmlContent(content);
+
+      // Extract from parsed .eml headers
+      if (parsed.headers['x-failed-recipients']) {
+        const emails = parsed.headers['x-failed-recipients'].match(EMAIL_REGEX) || [];
+        emails.forEach(email => {
+          results.push({
+            address: email.toLowerCase(),
+            source: 'attachment-header',
+            attachmentName: attachment.name
+          });
+        });
+      }
+
+      // Extract from parsed .eml body using existing methods
+      const dsnAddresses = extractFromDSN(parsed.body);
+      const bounceAddresses = extractFromBouncePatterns(parsed.body);
+
+      for (const addr of [...dsnAddresses, ...bounceAddresses]) {
+        results.push({
+          ...addr,
+          source: `attachment-${addr.source}`,
+          attachmentName: attachment.name
+        });
+      }
+
+      // Get diagnostics from attachment
+      const diagnostics = extractDiagnostics(parsed.body);
+      const failureReason = extractFailureReason(parsed.body);
+
+      // Update results with diagnostics
+      for (const result of results) {
+        if (result.attachmentName === attachment.name && !result.diagnosticCode) {
+          result.diagnosticCode = diagnostics.diagnosticCode || null;
+          result.statusCode = diagnostics.statusCode || null;
+          result.failureReason = result.failureReason || failureReason;
+        }
+      }
+    }
+    // Process plain text attachments
+    else if (contentType.includes('text/plain') || name.endsWith('.txt')) {
+      const dsnAddresses = extractFromDSN(content);
+      const bounceAddresses = extractFromBouncePatterns(content);
+
+      for (const addr of [...dsnAddresses, ...bounceAddresses]) {
+        results.push({
+          ...addr,
+          source: `attachment-${addr.source}`,
+          attachmentName: attachment.name
+        });
+      }
+    }
+  }
+
+  // Deduplicate within attachments
+  const addressMap = new Map();
+  for (const addr of results) {
+    if (!addressMap.has(addr.address)) {
+      addressMap.set(addr.address, addr);
+    }
+  }
+
+  return Array.from(addressMap.values());
+}
+
 module.exports = {
   extractFailedAddresses,
   extractFromHeader,
   extractFromDSN,
   extractFromBouncePatterns,
   extractDiagnostics,
-  extractFailureReason
+  extractFailureReason,
+  extractFromAttachments,
+  parseEmlContent
 };
