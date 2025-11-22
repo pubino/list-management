@@ -48,11 +48,8 @@
             "uri": "https://graph.microsoft.com/v1.0/subscriptions"
           }
         },
-        "recurrence": {
-          "frequency": "Minute",
-          "interval": 1
-        },
-        "splitOn": "@triggerBody()?['value']"
+        "splitOn": "@triggerBody()?['value']",
+        "conditions": []
       }
     },
     "actions": {
