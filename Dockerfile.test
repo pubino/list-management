@@ -1,0 +1,18 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json ./
+COPY azure-func-lists/package.json ./azure-func-lists/
+
+# Install dependencies
+RUN npm install
+RUN cd azure-func-lists && npm install
+
+# Copy source and tests
+COPY azure-func-lists/src ./azure-func-lists/src
+COPY tests ./tests
+
+# Run tests
+CMD ["npx", "jest", "--verbose"]

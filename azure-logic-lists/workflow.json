@@ -1,0 +1,185 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "WatchedFolders": {
+        "defaultValue": ["Inbox"],
+        "type": "Array"
+      },
+      "ReportEmail": {
+        "defaultValue": "",
+        "type": "String"
+      },
+      "AdminEmail": {
+        "defaultValue": "",
+        "type": "String"
+      },
+      "FunctionAppUrl": {
+        "defaultValue": "",
+        "type": "String"
+      }
+    },
+    "triggers": {
+      "When_a_new_email_arrives": {
+        "type": "ApiConnectionNotification",
+        "inputs": {
+          "fetch": {
+            "method": "get",
+            "uri": "https://graph.microsoft.com/v1.0/me/mailFolders/@{encodeURIComponent(triggerBody()?['folderId'])}/messages/@{encodeURIComponent(triggerBody()?['id'])}",
+            "queries": {
+              "$select": "id,subject,body,from,receivedDateTime,internetMessageHeaders"
+            }
+          },
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365']['connectionId']"
+            }
+          },
+          "subscribe": {
+            "body": {
+              "NotificationUrl": "@{listCallbackUrl()}"
+            },
+            "method": "post",
+            "uri": "https://graph.microsoft.com/v1.0/subscriptions"
+          }
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerBody()?['value']"
+      }
+    },
+    "actions": {
+      "Initialize_ProcessingResult": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "ProcessingResult",
+              "type": "object",
+              "value": {}
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Call_Function_App": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@parameters('FunctionAppUrl')",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "messageId": "@triggerBody()?['id']",
+            "subject": "@triggerBody()?['subject']",
+            "body": "@triggerBody()?['body']?['content']",
+            "headers": "@triggerBody()?['internetMessageHeaders']",
+            "from": "@triggerBody()?['from']?['emailAddress']?['address']",
+            "receivedDateTime": "@triggerBody()?['receivedDateTime']"
+          }
+        },
+        "runAfter": {
+          "Initialize_ProcessingResult": ["Succeeded"]
+        }
+      },
+      "Set_ProcessingResult": {
+        "type": "SetVariable",
+        "inputs": {
+          "name": "ProcessingResult",
+          "value": "@body('Call_Function_App')"
+        },
+        "runAfter": {
+          "Call_Function_App": ["Succeeded"]
+        }
+      },
+      "Check_Processing_Success": {
+        "type": "If",
+        "expression": {
+          "and": [
+            {
+              "equals": [
+                "@variables('ProcessingResult')?['success']",
+                true
+              ]
+            }
+          ]
+        },
+        "actions": {
+          "Send_Report_Email": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['office365']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/Mail",
+              "body": {
+                "To": "@parameters('ReportEmail')",
+                "Subject": "Email Processing Report - @{triggerBody()?['subject']}",
+                "Body": "<h2>Email Processing Report</h2><p><strong>Message ID:</strong> @{triggerBody()?['id']}</p><p><strong>Subject:</strong> @{triggerBody()?['subject']}</p><p><strong>From:</strong> @{triggerBody()?['from']?['emailAddress']?['address']}</p><p><strong>Received:</strong> @{triggerBody()?['receivedDateTime']}</p><h3>Extracted Failed Addresses:</h3><pre>@{json(variables('ProcessingResult')?['extractedAddresses'])}</pre><p><strong>Details:</strong> @{variables('ProcessingResult')?['processingDetails']}</p>",
+                "Importance": "Normal"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Send_Error_Report": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['office365']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "@parameters('AdminEmail')",
+                  "Subject": "ALERT: Email Processing Failed - @{triggerBody()?['subject']}",
+                  "Body": "<h2>Email Processing Failed</h2><p><strong>Message ID:</strong> @{triggerBody()?['id']}</p><p><strong>Subject:</strong> @{triggerBody()?['subject']}</p><p><strong>Error:</strong> @{variables('ProcessingResult')?['error']}</p>",
+                  "Importance": "High"
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Set_ProcessingResult": ["Succeeded"]
+        }
+      },
+      "Handle_Function_Error": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/v2/Mail",
+          "body": {
+            "To": "@parameters('AdminEmail')",
+            "Subject": "CRITICAL: Function App Call Failed",
+            "Body": "<h2>Function App Call Failed</h2><p><strong>Message ID:</strong> @{triggerBody()?['id']}</p><p><strong>Subject:</strong> @{triggerBody()?['subject']}</p><p><strong>Error:</strong> @{body('Call_Function_App')}</p><p>Please check the Function App logs and configuration.</p>",
+            "Importance": "High"
+          }
+        },
+        "runAfter": {
+          "Call_Function_App": ["Failed", "TimedOut"]
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

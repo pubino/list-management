@@ -1,0 +1,27 @@
+{
+  "name": "azure-func-lists",
+  "version": "1.0.0",
+  "description": "Azure Function App for processing Outlook email delivery failures",
+  "main": "src/functions/processEmail.js",
+  "scripts": {
+    "start": "func start",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
+  }
+}

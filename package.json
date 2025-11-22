@@ -1,0 +1,28 @@
+{
+  "name": "azure-list-cleanup",
+  "version": "1.0.0",
+  "description": "Azure Logic App and Function App for processing email delivery failures",
+  "scripts": {
+    "test": "docker-compose -f docker-compose.test.yml build && docker-compose -f docker-compose.test.yml run --rm test",
+    "test:coverage": "docker-compose -f docker-compose.test.yml build && docker-compose -f docker-compose.test.yml run --rm test npm run test:cov",
+    "test:cov": "jest --coverage",
+    "test:local": "jest",
+    "func:start": "cd azure-func-lists && npm start",
+    "func:install": "cd azure-func-lists && npm install",
+    "setup": "./scripts/setup.sh",
+    "deploy": "./scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"],
+    "testMatch": ["**/*.test.js"],
+    "collectCoverageFrom": [
+      "azure-func-lists/src/**/*.js"
+    ],
+    "coverageDirectory": "coverage",
+    "verbose": true
+  }
+}
