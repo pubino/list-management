@@ -330,6 +330,3 @@ list-management/
 | `npm run setup` | Interactive deployment setup |
 | `npm run deploy` | Deploy to Azure |
 
-## License
-
-MIT
